@@ -89,7 +89,7 @@ func (c *Client) Evaluate(ctx context.Context, item ItemContext) (Result, error)
 			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
 			{Role: openai.ChatMessageRoleUser, Content: userPrompt},
 		},
-		Temperature: 0.2,
+		Temperature: 1,
 	})
 	if err != nil {
 		return Result{}, err
