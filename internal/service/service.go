@@ -148,7 +148,7 @@ func (s *Service) notifyWebhook(ctx context.Context, item rss.Item, result analy
 	payload := map[string]any{
 		"msgtype": "text",
 		"text": map[string]string{
-			"content": fmt.Sprintf("%s\n分类: %s\nAI分析: %s\n链接: %s", item.Title, result.Category, result.Reason, item.Link),
+			"content": fmt.Sprintf("%s\n%s", item.Title, item.Link),
 		},
 	}
 
