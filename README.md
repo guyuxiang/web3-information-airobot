@@ -51,6 +51,38 @@ go run ./cmd/aiweb3news
    - 返回分类、理由、标签
 3. 将所有分析结果存入 MySQL（表：`news_analysis`），接口 `/items` 读取数据库返回“相关”资讯
 
+## Docker 运行
+
+```bash
+# 登录 GitHub Container Registry（镜像为私有，需先登录）
+docker login ghcr.io -u guyuxiang
+
+# 拉取并运行容器
+docker run -d -p 8082:8082 --name aiweb3news \
+  -e OPENAI_API_KEY=sk-6Fb99Uj0CY8gmWcvlsknjxkweHWAaTpYRVdrbaMikS9DObxv \
+  -e OPENAI_MODEL=z-ai/glm-5.1 \
+  -e OPENAI_BASE_URL=https://us-newapi.llschain.com/v1 \
+  -e DB_NAME=aiweb3news \
+  ghcr.io/guyuxiang/aiweb3news:latest
+```
+
+### 查看日志
+
+```bash
+# 查看日志
+docker logs -f --tail 100 aiweb3news
+```
+
+### 自定义配置
+
+可以通过 `-e` 覆盖以下环境变量：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `OPENAI_API_KEY` | OpenAI API Key | 见上方命令 |
+| `OPENAI_MODEL` | OpenAI 模型 | `z-ai/glm-5.1` |
+| `OPENAI_BASE_URL` | OpenAI 网关地址 | `https://us-newapi.llschain.com/v1` |
+
 ## 开发提示
 
 - 需要网络访问 RSS 和 OpenAI；未设置 `OPENAI_API_KEY` 时分析会失败
