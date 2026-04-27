@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"aiweb3news/internal/analysis"
 	"aiweb3news/internal/config"
+	"aiweb3news/internal/email"
 	"aiweb3news/internal/rss"
 	"aiweb3news/internal/storage"
 )
@@ -19,21 +21,23 @@ const wecomWebhookURL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=74
 
 // Service ties together RSS polling and AI analysis.
 type Service struct {
-	fetcher  *rss.Fetcher
-	analyzer analysis.Analyzer
-	store    *storage.Store
-	logger   *log.Logger
-	cfg      config.Config
+	fetcher     *rss.Fetcher
+	analyzer    analysis.Analyzer
+	store       *storage.Store
+	emailSender *email.Sender
+	logger      *log.Logger
+	cfg         config.Config
 }
 
 // NewService creates a Service instance.
-func NewService(fetcher *rss.Fetcher, analyzer analysis.Analyzer, store *storage.Store, logger *log.Logger, cfg config.Config) *Service {
+func NewService(fetcher *rss.Fetcher, analyzer analysis.Analyzer, store *storage.Store, emailSender *email.Sender, logger *log.Logger, cfg config.Config) *Service {
 	return &Service{
-		fetcher:  fetcher,
-		analyzer: analyzer,
-		store:    store,
-		logger:   logger,
-		cfg:      cfg,
+		fetcher:     fetcher,
+		analyzer:    analyzer,
+		store:       store,
+		emailSender: emailSender,
+		logger:      logger,
+		cfg:         cfg,
 	}
 }
 
@@ -64,6 +68,9 @@ func (s *Service) Run(ctx context.Context) error {
 
 	// Kick off an initial fetch.
 	s.pollOnce(ctx)
+
+	// Start daily email digest loop.
+	go s.startDailyEmailLoop(ctx)
 
 	ticker := time.NewTicker(s.cfg.PollInterval)
 	defer ticker.Stop()
@@ -175,4 +182,97 @@ func (s *Service) notifyWebhook(ctx context.Context, item rss.Item, result analy
 	if resp.StatusCode >= 300 {
 		s.logger.Printf("webhook returned non-2xx status: %s", resp.Status)
 	}
+}
+
+// startDailyEmailLoop schedules the daily digest email at the configured hour (Beijing time).
+func (s *Service) startDailyEmailLoop(ctx context.Context) {
+	if s.emailSender == nil {
+		s.logger.Println("email sender not configured, skipping daily digest")
+		return
+	}
+
+	beijingLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		s.logger.Printf("failed to load Asia/Shanghai location: %v, falling back to local", err)
+		beijingLoc = time.Now().Location()
+	}
+
+	now := time.Now().In(beijingLoc)
+	next := time.Date(now.Year(), now.Month(), now.Day(), s.cfg.EmailSendHour, 0, 0, 0, beijingLoc)
+
+	// If the send hour today has already passed, schedule for tomorrow.
+	if !next.After(now) {
+		next = next.Add(24 * time.Hour)
+	}
+
+	duration := next.Sub(time.Now())
+	s.logger.Printf("daily email digest scheduled at %s Beijing time (in %s)", next.Format("2006-01-02 15:04:05"), duration.Round(time.Minute))
+
+	// First trigger: one-shot timer to align to the exact hour.
+	timer := time.NewTimer(duration)
+
+	for {
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+			s.sendDailyEmail(ctx)
+
+			// Next trigger in 24 hours.
+			timer.Reset(24 * time.Hour)
+		}
+	}
+}
+
+// sendDailyEmail queries yesterday's items and sends the digest email.
+func (s *Service) sendDailyEmail(ctx context.Context) {
+	s.logger.Println("preparing daily digest email")
+
+	beijingLoc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		beijingLoc = time.Now().Location()
+	}
+	now := time.Now().In(beijingLoc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, beijingLoc)
+	yesterday := today.Add(-24 * time.Hour)
+
+	items, err := s.store.ListRelevantByDateRange(ctx, yesterday, today)
+	if err != nil {
+		s.logger.Printf("failed to query items for daily digest: %v", err)
+		return
+	}
+
+	if len(items) == 0 {
+		s.logger.Println("no relevant items for yesterday, skipping daily digest")
+		return
+	}
+
+	htmlBody := email.BuildDailyDigestHTML(items, yesterday)
+	if htmlBody == "" {
+		s.logger.Println("daily digest HTML builder returned empty, skipping send")
+		return
+	}
+
+	// Parse recipients (comma-separated)
+	recipients := strings.Split(s.cfg.EmailTo, ",")
+	var cleanRecipients []string
+	for _, r := range recipients {
+		r = strings.TrimSpace(r)
+		if r != "" {
+			cleanRecipients = append(cleanRecipients, r)
+		}
+	}
+
+	if len(cleanRecipients) == 0 {
+		s.logger.Println("no valid EMAIL_TO recipients, skipping daily digest")
+		return
+	}
+
+	if err := s.emailSender.SendDailyDigest(ctx, htmlBody, cleanRecipients); err != nil {
+		s.logger.Printf("failed to send daily digest: %v", err)
+		return
+	}
+
+	s.logger.Printf("daily digest email sent to %d recipient(s) with %d items", len(cleanRecipients), len(items))
 }

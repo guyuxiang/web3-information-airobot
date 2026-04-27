@@ -29,6 +29,7 @@ type StoredItem struct {
 	PublishedAt time.Time
 	Category    string
 	Reason      string
+	Summary     string
 	Tags        []string
 	Relevant    bool
 }
@@ -64,6 +65,52 @@ func NewMySQLStore(ctx context.Context, cfg config.Config, logger *log.Logger) (
 		return nil, err
 	}
 	return store, nil
+}
+
+// ListRelevantByDateRange returns relevant items within a date range, grouped by category.
+func (s *Store) ListRelevantByDateRange(ctx context.Context, start, end time.Time) ([]StoredItem, error) {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT guid, title, link, published_at, category, reason, summary, tags, relevant
+FROM news_analysis
+WHERE relevant = 1 AND published_at IS NOT NULL
+  AND published_at >= ? AND published_at < ?
+ORDER BY category ASC, published_at DESC`, start, end)
+	if err != nil {
+		return nil, fmt.Errorf("list relevant by date range: %w", err)
+	}
+	defer rows.Close()
+
+	var items []StoredItem
+	for rows.Next() {
+		var (
+			item   StoredItem
+			tags   sql.NullString
+			pub    sql.NullTime
+			relInt int
+		)
+		var summary sql.NullString
+		if err := rows.Scan(&item.GUID, &item.Title, &item.Link, &pub, &item.Category, &item.Reason, &summary, &tags, &relInt); err != nil {
+			return nil, err
+		}
+		if pub.Valid {
+			item.PublishedAt = pub.Time
+		}
+		item.Relevant = relInt == 1
+		if summary.Valid {
+			item.Summary = summary.String
+		}
+		if tags.Valid && tags.String != "" {
+			var parsed []string
+			if err := json.Unmarshal([]byte(tags.String), &parsed); err == nil {
+				item.Tags = parsed
+			}
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // Close releases the database connection.
@@ -135,7 +182,7 @@ ON DUPLICATE KEY UPDATE
 // ListRelevant returns the most recent relevant items.
 func (s *Store) ListRelevant(ctx context.Context, limit int) ([]StoredItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT guid, title, link, published_at, category, reason, tags, relevant
+SELECT guid, title, link, published_at, category, reason, summary, tags, relevant
 FROM news_analysis
 WHERE relevant = 1
 ORDER BY published_at DESC, id DESC
@@ -148,18 +195,22 @@ LIMIT ?`, limit)
 	var items []StoredItem
 	for rows.Next() {
 		var (
-			item   StoredItem
-			tags   sql.NullString
-			pub    sql.NullTime
-			relInt int
+			item    StoredItem
+			tags    sql.NullString
+			pub     sql.NullTime
+			summary sql.NullString
+			relInt  int
 		)
-		if err := rows.Scan(&item.GUID, &item.Title, &item.Link, &pub, &item.Category, &item.Reason, &tags, &relInt); err != nil {
+		if err := rows.Scan(&item.GUID, &item.Title, &item.Link, &pub, &item.Category, &item.Reason, &summary, &tags, &relInt); err != nil {
 			return nil, err
 		}
 		if pub.Valid {
 			item.PublishedAt = pub.Time
 		}
 		item.Relevant = relInt == 1
+		if summary.Valid {
+			item.Summary = summary.String
+		}
 		if tags.Valid && tags.String != "" {
 			var parsed []string
 			if err := json.Unmarshal([]byte(tags.String), &parsed); err == nil {

@@ -7,6 +7,7 @@ import (
 
 	"aiweb3news/internal/analysis"
 	"aiweb3news/internal/config"
+	"aiweb3news/internal/email"
 	"aiweb3news/internal/rss"
 	"aiweb3news/internal/service"
 	"aiweb3news/internal/storage"
@@ -29,7 +30,9 @@ func main() {
 	}
 	defer store.Close()
 
-	svc := service.NewService(fetcher, analyzer, store, logger, cfg)
+	emailSender := email.NewSender(cfg.EmailSMTPHost, cfg.EmailSMTPPort, cfg.EmailSMTPUser, cfg.EmailSMTPPass, cfg.EmailFrom, cfg.EmailFromName, logger)
+
+	svc := service.NewService(fetcher, analyzer, store, emailSender, logger, cfg)
 
 	if err := svc.Run(ctx); err != nil {
 		logger.Fatalf("service stopped with error: %v", err)

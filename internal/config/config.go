@@ -8,50 +8,74 @@ import (
 )
 
 const (
-	defaultFeedURL      = "https://www.techflowpost.com/rss.aspx"
-	defaultPollMinutes  = 15
-	defaultBindAddr     = ":8082"
-	defaultOpenAIModel  = "gpt-4o"
-	defaultOpenAIBase   = "https://aigateway.hrlyit.com/v1"
-	defaultMaxItemStore = 50
-	defaultDBHost       = "mysql01.dev.lls.com"
-	defaultDBPort       = 4120
-	defaultDBUser       = "root"
-	defaultDBPass       = "123456"
-	defaultDBName       = "aiweb3news"
+	defaultFeedURL       = "https://www.techflowpost.com/rss.aspx"
+	defaultPollMinutes   = 15
+	defaultBindAddr      = ":8082"
+	defaultOpenAIModel   = "gpt-4o"
+	defaultOpenAIBase    = "https://aigateway.hrlyit.com/v1"
+	defaultMaxItemStore  = 50
+	defaultDBHost        = "mysql01.dev.lls.com"
+	defaultDBPort        = 4120
+	defaultDBUser        = "root"
+	defaultDBPass        = "123456"
+	defaultDBName        = "aiweb3news"
+	defaultEmailSMTPPort = 587
+	defaultEmailSendHour = 9
 )
 
 // Config holds runtime configuration loaded from environment variables.
 type Config struct {
-	FeedURL      string
-	PollInterval time.Duration
-	BindAddr     string
-	OpenAIKey    string
-	OpenAIModel  string
-	OpenAIBase   string
-	MaxItems     int
-	DBHost       string
-	DBPort       int
-	DBUser       string
-	DBPass       string
-	DBName       string
+	FeedURL       string
+	PollInterval  time.Duration
+	BindAddr      string
+	OpenAIKey     string
+	OpenAIModel   string
+	OpenAIBase    string
+	MaxItems      int
+	DBHost        string
+	DBPort        int
+	DBUser        string
+	DBPass        string
+	DBName        string
+	EmailSMTPHost string
+	EmailSMTPPort int
+	EmailSMTPUser string
+	EmailSMTPPass string
+	EmailFrom     string
+	EmailFromName string
+	EmailTo       string
+	EmailSendHour int
 }
 
 // Load reads environment variables, filling in reasonable defaults.
 func Load() Config {
+	sendHour := intWithDefault("EMAIL_SEND_HOUR", defaultEmailSendHour)
+	if sendHour < 0 || sendHour > 23 {
+		log.Printf("invalid EMAIL_SEND_HOUR=%d, clamping to %d", sendHour, defaultEmailSendHour)
+		sendHour = defaultEmailSendHour
+	}
+
 	return Config{
-		FeedURL:      stringWithDefault("FEED_URL", defaultFeedURL),
-		PollInterval: durationFromMinutes("POLL_INTERVAL_MINUTES", defaultPollMinutes),
-		BindAddr:     stringWithDefault("BIND_ADDR", defaultBindAddr),
-		OpenAIKey:    os.Getenv("OPENAI_API_KEY"),
-		OpenAIModel:  stringWithDefault("OPENAI_MODEL", defaultOpenAIModel),
-		OpenAIBase:   stringWithDefault("OPENAI_BASE_URL", defaultOpenAIBase),
-		MaxItems:     intWithDefault("MAX_ITEMS", defaultMaxItemStore),
-		DBHost:       stringWithDefault("DB_HOST", defaultDBHost),
-		DBPort:       intWithDefault("DB_PORT", defaultDBPort),
-		DBUser:       stringWithDefault("DB_USER", defaultDBUser),
-		DBPass:       stringWithDefault("DB_PASSWORD", defaultDBPass),
-		DBName:       stringWithDefault("DB_NAME", defaultDBName),
+		FeedURL:       stringWithDefault("FEED_URL", defaultFeedURL),
+		PollInterval:  durationFromMinutes("POLL_INTERVAL_MINUTES", defaultPollMinutes),
+		BindAddr:      stringWithDefault("BIND_ADDR", defaultBindAddr),
+		OpenAIKey:     os.Getenv("OPENAI_API_KEY"),
+		OpenAIModel:   stringWithDefault("OPENAI_MODEL", defaultOpenAIModel),
+		OpenAIBase:    stringWithDefault("OPENAI_BASE_URL", defaultOpenAIBase),
+		MaxItems:      intWithDefault("MAX_ITEMS", defaultMaxItemStore),
+		DBHost:        stringWithDefault("DB_HOST", defaultDBHost),
+		DBPort:        intWithDefault("DB_PORT", defaultDBPort),
+		DBUser:        stringWithDefault("DB_USER", defaultDBUser),
+		DBPass:        stringWithDefault("DB_PASSWORD", defaultDBPass),
+		DBName:        stringWithDefault("DB_NAME", defaultDBName),
+		EmailSMTPHost: os.Getenv("EMAIL_SMTP_HOST"),
+		EmailSMTPPort: intWithDefault("EMAIL_SMTP_PORT", defaultEmailSMTPPort),
+		EmailSMTPUser: os.Getenv("EMAIL_SMTP_USER"),
+		EmailSMTPPass: os.Getenv("EMAIL_SMTP_PASSWORD"),
+		EmailFrom:     os.Getenv("EMAIL_FROM"),
+		EmailFromName: os.Getenv("EMAIL_FROM_NAME"),
+		EmailTo:       os.Getenv("EMAIL_TO"),
+		EmailSendHour: sendHour,
 	}
 }
 
