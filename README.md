@@ -87,7 +87,7 @@ go run ./cmd/testemail/
 
 ```bash
 docker run -d -p 8082:8082 --name aiweb3news \
-  -e OPENAI_API_KEY=sk-2d8b55f8500e4964b2adca0cbbfcf9ff \
+  -e OPENAI_API_KEY=<your-api-key> \
   -e OPENAI_MODEL=deepseek-v4-flash \
   -e OPENAI_BASE_URL=https://api.deepseek.com \
   ghcr.io/guyuxiang/aiweb3news:latest

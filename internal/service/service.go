@@ -17,7 +17,7 @@ import (
 	"aiweb3news/internal/storage"
 )
 
-const wecomWebhookURL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=74cb55e7-0430-400a-b3e2-2e8d05d8cb06"
+const wecomWebhookURL = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=%s"
 
 // Service ties together RSS polling and AI analysis.
 type Service struct {
@@ -152,6 +152,9 @@ func (s *Service) itemsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) notifyWebhook(ctx context.Context, item rss.Item, result analysis.Result) {
+	if s.cfg.WecomWebhookKey == "" {
+		return
+	}
 	payload := map[string]any{
 		"msgtype": "text",
 		"text": map[string]string{
@@ -165,7 +168,7 @@ func (s *Service) notifyWebhook(ctx context.Context, item rss.Item, result analy
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, wecomWebhookURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf(wecomWebhookURL, s.cfg.WecomWebhookKey), bytes.NewReader(body))
 	if err != nil {
 		s.logger.Printf("build webhook request failed: %v", err)
 		return
